@@ -16,20 +16,51 @@ import {
   Moon,
   Languages,
   AlertTriangle,
+  MessageCircle,
 } from 'lucide-react';
 import { usePOS } from '@/context/POSContext';
-import { Role } from '@/types/pos';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { lang, setLang, theme, setTheme, role, setRole, licenseStatus } = usePOS();
   const isAr = lang === 'ar';
+  const [authOpen, setAuthOpen] = React.useState(false);
+  const [password, setPassword] = React.useState('');
+  const [confirm, setConfirm] = React.useState('');
+  const [account, setAccount] = React.useState<'admin' | 'developer'>('admin');
+  const [configured, setConfigured] = React.useState(false);
+  const [error, setError] = React.useState('');
+  const openAuth = () => { setConfigured(Boolean(localStorage.getItem('pos_owner_password'))); setAuthOpen(true); };
+  const privileged = role === 'admin' || role === 'developer';
+  const restricted = ['/inventory', '/reports', '/license', '/dev-license', '/marketing'];
+  const isRestricted = restricted.some((path) => pathname === path || pathname.startsWith(path + '/'));
+  const passwordHash = async (value: string) => {
+    const bytes = new TextEncoder().encode('restopos-owner-v1:' + value);
+    const hash = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(hash), b => b.toString(16).padStart(2, '0')).join('');
+  };
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (!configured && (password.length < 8 || password !== confirm)) {
+      setError(isAr ? 'كلمة المرور ٨ أحرف على الأقل ويجب أن تتطابق.' : 'Passwords must match and contain at least 8 characters.');
+      return;
+    }
+    try {
+      const hash = await passwordHash(password);
+      const stored = localStorage.getItem('pos_owner_password');
+      if (stored && stored !== hash) { setError(isAr ? 'كلمة المرور غير صحيحة.' : 'Incorrect password.'); return; }
+      if (!stored) localStorage.setItem('pos_owner_password', hash);
+      setRole(account); setAuthOpen(false); setPassword(''); setConfirm('');
+    } catch { setError(isAr ? 'تعذر تسجيل الدخول؛ استخدم اتصالاً آمناً.' : 'Sign-in failed; use a secure connection.'); }
+  };
 
   const navItems = [
     { href: '/', icon: ShoppingCart, labelAr: 'الكاشير', labelEn: 'POS' },
     { href: '/tables', icon: LayoutGrid, labelAr: 'الطاولات', labelEn: 'Tables' },
     { href: '/kds', icon: ChefHat, labelAr: 'المطبخ KDS', labelEn: 'KDS' },
     { href: '/inventory', icon: Package, labelAr: 'المخزون', labelEn: 'Inventory' },
+    { href: '/marketing', icon: MessageCircle, labelAr: 'واتساب', labelEn: 'WhatsApp' },
     { href: '/customers', icon: Users, labelAr: 'العملاء', labelEn: 'Customers' },
     { href: '/reports', icon: BarChart3, labelAr: 'التقارير', labelEn: 'Reports' },
     { href: '/license', icon: KeyRound, labelAr: 'الترخيص', labelEn: 'License' },
@@ -56,7 +87,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Navigation Links */}
         <nav className="flex items-center gap-1 overflow-x-auto py-1">
-          {navItems.map((item) => {
+          {navItems.filter((item) => privileged || !restricted.includes(item.href)).map((item) => {
             const Icon = item.icon;
             const active = pathname === item.href;
             const isDev = item.href === '/dev-license';
@@ -83,19 +114,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
         {/* Controls: Role, License Badge, Theme, Lang */}
         <div className="flex items-center gap-2">
-          <select
-            value={role}
-            onChange={(e) => setRole(e.target.value as Role)}
-            aria-label="Role"
-            className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 font-medium"
-          >
-            <option value="admin">{isAr ? 'مدير (Admin)' : 'Admin'}</option>
-            <option value="cashier">{isAr ? 'كاشير (Cashier)' : 'Cashier'}</option>
-            <option value="waiter">{isAr ? 'ويتر (Waiter)' : 'Waiter'}</option>
-            <option value="chef">{isAr ? 'شيف (Chef)' : 'Chef'}</option>
-          </select>
+          {privileged ? (
+            <button onClick={() => setRole('cashier')} className="text-xs px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800">
+              {isAr ? 'خروج إلى الكاشير' : 'Return to cashier'}
+            </button>
+          ) : (
+            <button onClick={openAuth} className="text-xs px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-800">
+              {isAr ? 'دخول المالك / المطور' : 'Owner / developer sign in'}
+            </button>
+          )}
 
-          <Link
+          {privileged && <Link
             href="/license"
             className={`hidden sm:flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg font-medium ${
               licenseStatus.valid
@@ -117,7 +146,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 ? 'غير مرخص'
                 : 'Unlicensed'}
             </span>
-          </Link>
+          </Link>}
 
           <button
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
@@ -138,7 +167,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 p-3 sm:p-4 max-w-[1600px] w-full mx-auto">{children}</main>
+      <main className="flex-1 p-3 sm:p-4 max-w-[1600px] w-full mx-auto">
+        {isRestricted && !privileged ? <div className="p-6 rounded-2xl bg-white dark:bg-slate-900"><h2 className="font-bold">{isAr ? 'هذه الصفحة للمالك أو المطور فقط' : 'Owner or developer access required'}</h2><button className="mt-4 rounded-xl bg-orange-500 text-white px-4 py-2" onClick={openAuth}>{isAr ? 'تسجيل الدخول' : 'Sign in'}</button></div> : children}
+      </main>
+      {authOpen && <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4"><form onSubmit={handleLogin} className="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 p-6 space-y-4">
+        <h2 className="font-bold text-lg">{configured ? (isAr ? 'دخول المالك أو المطور' : 'Owner or developer sign in') : (isAr ? 'إعداد كلمة مرور المالك لأول مرة' : 'Set up the owner password')}</h2>
+        {!configured && <p className="text-sm text-amber-500">{isAr ? 'يجب أن يُعدّ المالك كلمة المرور على هذا الجهاز قبل تسليمه للكاشير. الحسابان يستخدمان كلمة المرور نفسها.' : 'The owner must set this password on this device before handing it to the cashier. Both roles share the password.'}</p>}
+        <p className="text-xs text-slate-500">{isAr ? 'تنبيه: هذا قفل محلي للواجهة فقط، ويمكن تجاوزه عبر أدوات المتصفح أو مسح بياناته. لا يوفر حماية حقيقية للبيانات.' : 'Warning: this is a local UI lock only. Browser tools or clearing storage can bypass it; it does not securely protect data.'}</p>
+        <select aria-label={isAr ? 'الحساب' : 'Account'} value={account} onChange={e => setAccount(e.target.value as 'admin' | 'developer')} className="w-full p-2 rounded-lg bg-slate-100 dark:bg-slate-800"><option value="admin">{isAr ? 'المالك' : 'Owner'}</option><option value="developer">{isAr ? 'المطور' : 'Developer'}</option></select>
+        <input aria-label={isAr ? 'كلمة المرور' : 'Password'} type="password" autoComplete={configured ? 'current-password' : 'new-password'} required value={password} onChange={e => setPassword(e.target.value)} placeholder={isAr ? 'كلمة المرور' : 'Password'} className="w-full p-2 rounded-lg bg-slate-100 dark:bg-slate-800" />
+        {!configured && <input aria-label={isAr ? 'تأكيد كلمة المرور' : 'Confirm password'} type="password" autoComplete="new-password" required value={confirm} onChange={e => setConfirm(e.target.value)} placeholder={isAr ? 'تأكيد كلمة المرور' : 'Confirm password'} className="w-full p-2 rounded-lg bg-slate-100 dark:bg-slate-800" />}
+        {error && <p role="alert" className="text-red-500 text-sm">{error}</p>}
+        <div className="flex gap-2"><button className="bg-orange-500 text-white px-4 py-2 rounded-xl" type="submit">{isAr ? 'دخول' : 'Sign in'}</button><button className="px-4 py-2" type="button" onClick={() => { setAuthOpen(false); setPassword(''); setConfirm(''); setError(''); }}>{isAr ? 'إلغاء' : 'Cancel'}</button></div>
+      </form></div>}
     </div>
   );
 }
