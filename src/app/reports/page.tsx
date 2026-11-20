@@ -74,7 +74,7 @@ export default function ReportsPage() {
           <p className="text-2xl font-extrabold mt-1">{paidOrders.length}</p>
         </div>
 
-        {role === 'admin' ? (
+        {(role === 'admin' || role === 'developer') ? (
           <>
             <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
               <p className="text-xs text-slate-400">{isAr ? 'تكلفة المكونات (Food Cost)' : 'Food Cost'}</p>

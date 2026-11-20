@@ -83,7 +83,7 @@ const STORAGE_KEY = 'restaurant_pos_state_v1';
 export function POSProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLang] = useState<Language>('ar');
   const [theme, setTheme] = useState<Theme>('dark');
-  const [role, setRole] = useState<Role>('admin');
+  const [role, setRole] = useState<Role>('cashier');
   const [deviceId, setDeviceId] = useState<string>('POS-LOADING');
   const [hydrated, setHydrated] = useState(false);
 

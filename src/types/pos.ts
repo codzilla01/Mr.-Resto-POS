@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'cashier' | 'waiter' | 'chef';
+export type Role = 'admin' | 'developer' | 'cashier' | 'waiter' | 'chef';
 export type Language = 'ar' | 'en';
 export type Theme = 'dark' | 'light';
 export type OrderType = 'dine_in' | 'takeaway' | 'delivery';
